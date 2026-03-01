@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useRef, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -19,21 +19,32 @@ import { Button } from "@/components/ui/Button";
 
 function AnalyzeContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { status, result, error, analyze, reset } = useAnalysis();
+  const lastAnalyzedRef = useRef<string>("");
 
   const input = searchParams.get("input") || "";
   const mode = (searchParams.get("mode") as "url" | "domain") || "domain";
+  const key = `${mode}:${input}`;
 
+  // Run analysis whenever the URL params change
   useEffect(() => {
-    if (input && status === "idle") {
+    if (input && key !== lastAnalyzedRef.current) {
+      lastAnalyzedRef.current = key;
       analyze(input, mode);
     }
-  }, [input, mode, status, analyze]);
+  }, [input, mode, key, analyze]);
 
   const handleNewAnalysis = (newInput: string, newMode: "url" | "domain") => {
-    reset();
-    // Small delay so the reset takes effect
-    setTimeout(() => analyze(newInput, newMode), 50);
+    // Update URL params — this triggers the useEffect above
+    const params = new URLSearchParams({ input: newInput, mode: newMode });
+    router.push(`/analyze?${params.toString()}`);
+    // Also immediately kick off the analysis in case params are the same
+    const newKey = `${newMode}:${newInput}`;
+    if (newKey !== lastAnalyzedRef.current) {
+      lastAnalyzedRef.current = newKey;
+      analyze(newInput, newMode);
+    }
   };
 
   return (
@@ -61,7 +72,10 @@ function AnalyzeContent() {
                 Analysis Failed
               </h2>
               <p className="text-muted text-sm mb-6">{error}</p>
-              <Button variant="secondary" onClick={reset}>
+              <Button variant="secondary" onClick={() => {
+                lastAnalyzedRef.current = "";
+                reset();
+              }}>
                 Try Again
               </Button>
             </div>
